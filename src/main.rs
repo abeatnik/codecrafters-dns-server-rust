@@ -20,7 +20,6 @@ fn main() {
                 println!("Received {} bytes from {}", size, source);
                 let header_bytes = &buf[..12];
                 let mut header = DNSHeader::from_bytes(header_bytes);
-                let labels = vec!["codecrafters".to_string(), "io".to_string()];
                 header.flags.qr = true;
                 header.flags.aa = false;
                 header.flags.tc = false;
@@ -29,9 +28,17 @@ fn main() {
                 header.flags.rcode = if header.flags.opcode == 0 { 0 } else { 4 };
                 header.qd_count = 1;
                 header.an_count = 1;
-                let question = DNSQuestion::new_atype_inclass(labels.clone());
+                let question_bytes = &buf[12..size];
+                let question = DNSQuestion::from_bytes(question_bytes);
                 let rdata: u32 = 0x08080808;
-                let answer = DNSAnswer::new_atype_inclass(labels, 0x0001, 0x0001, 60, 4, rdata);
+                let answer = DNSAnswer::new_atype_inclass(
+                    question.name.clone(),
+                    question.r#type,
+                    question.class,
+                    60,
+                    4,
+                    rdata
+                );
                 let mut response = BytesMut::new();
                 response.put(header.to_bytes());
                 response.put(question.to_bytes());
