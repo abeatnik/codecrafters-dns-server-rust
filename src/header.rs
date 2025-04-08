@@ -1,10 +1,10 @@
-use bytes::{ BufMut, BytesMut };
+use bytes::{ BufMut, BytesMut, Buf };
 
 pub struct DNSHeader {
     id: u16,
-    flags: DNSFlags,
-    qd_count: u16,
-    an_count: u16,
+    pub flags: DNSFlags,
+    pub qd_count: u16,
+    pub an_count: u16,
     ns_count: u16,
     ar_count: u16,
 }
@@ -21,6 +21,17 @@ impl DNSHeader {
         buf.put_u16(self.ar_count);
 
         buf
+    }
+
+    pub fn from_bytes(mut buf: impl Buf) -> Self {
+        Self {
+            id: buf.get_u16(),
+            flags: DNSFlags::from_flag_bits(buf.get_u16()),
+            qd_count: buf.get_u16(),
+            an_count: buf.get_u16(),
+            ns_count: buf.get_u16(),
+            ar_count: buf.get_u16(),
+        }
     }
 
     pub fn new(
@@ -43,14 +54,14 @@ impl DNSHeader {
 }
 
 pub struct DNSFlags {
-    qr: bool,
-    opcode: u8, //will become 4 bits later, so max is 0xF
-    aa: bool,
-    tc: bool,
+    pub qr: bool,
+    pub opcode: u8, //will become 4 bits later, so max is 0xF
+    pub aa: bool,
+    pub tc: bool,
     rd: bool,
-    ra: bool,
-    z: u8, //will become 3 bits later, so max is 0x7
-    rcode: u8, //will become 4 bits later, so max is 0xF
+    pub ra: bool,
+    pub z: u8, //will become 3 bits later, so max is 0x7
+    pub rcode: u8, //will become 4 bits later, so max is 0xF
 }
 
 impl DNSFlags {
@@ -84,5 +95,18 @@ impl DNSFlags {
             ((self.ra as u16) << 7) |
             (((self.z as u16) & 0x7) << 4) | //  4-6
             ((self.rcode as u16) & 0xf) // 0-4
+    }
+
+    pub fn from_flag_bits(bits: u16) -> Self {
+        Self {
+            qr: ((bits >> 15) & 0x1) == 1,
+            opcode: ((bits >> 11) & 0xf) as u8,
+            aa: ((bits >> 10) & 0x1) == 1,
+            tc: ((bits >> 9) & 0x1) == 1,
+            rd: ((bits >> 8) & 0x1) == 1,
+            ra: ((bits >> 7) & 0x1) == 1,
+            z: ((bits >> 4) & 0x7) as u8,
+            rcode: (bits & 0xf) as u8,
+        }
     }
 }

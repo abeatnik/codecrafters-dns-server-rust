@@ -25,7 +25,7 @@ impl DNSQuestion {
 
     pub fn new_atype_inclass(labels: Vec<String>) -> Self {
         Self {
-            name: labels,
+            name : labels,
             r#type: 0x0001,
             class: 0x0001,
         }
