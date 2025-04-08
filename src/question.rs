@@ -2,7 +2,7 @@ use bytes::{ BufMut, BytesMut };
 
 #[derive(Debug)]
 pub struct DNSQuestion {
-    labels: Vec<String>,
+    name: Vec<String>, //labels
     r#type: u16, //0x0001
     class: u16, //0x0001
 }
@@ -11,7 +11,7 @@ impl DNSQuestion {
     pub fn to_bytes(&self) -> BytesMut {
         let mut buf = BytesMut::new();
 
-        for label in self.labels.iter() {
+        for label in self.name.iter() {
             let count = label.len() as u8;
             buf.put_u8(count);
             buf.put_slice(label.as_bytes());
@@ -25,7 +25,7 @@ impl DNSQuestion {
 
     pub fn new_atype_inclass(labels: Vec<String>) -> Self {
         Self {
-            labels,
+            name: labels,
             r#type: 0x0001,
             class: 0x0001,
         }
