@@ -2,8 +2,8 @@
 use std::net::UdpSocket;
 use bytes::{ BufMut, BytesMut };
 
-use codecrafters_dns_server::{ DNSHeader, DNSFlags };
-use codecrafters_dns_server::DNSQuestion;
+use codecrafters_dns_server::header::{ DNSHeader, DNSFlags };
+use codecrafters_dns_server::question::DNSQuestion;
 
 fn main() {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
