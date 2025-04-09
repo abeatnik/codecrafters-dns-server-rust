@@ -26,23 +26,39 @@ fn main() {
                 header.flags.ra = false;
                 header.flags.z = 0;
                 header.flags.rcode = if header.flags.opcode == 0 { 0 } else { 4 };
-                header.qd_count = 1;
-                header.an_count = 1;
-                let question_bytes = &buf[12..size];
-                let question = DNSQuestion::from_bytes(question_bytes);
-                let rdata: u32 = 0x08080808;
-                let answer = DNSAnswer::new_atype_inclass(
-                    question.name.clone(),
-                    question.r#type,
-                    question.class,
-                    60,
-                    4,
-                    rdata
-                );
+                header.an_count = header.qd_count;
+
                 let mut response = BytesMut::new();
                 response.put(header.to_bytes());
-                response.put(question.to_bytes());
-                response.put(answer.to_bytes());
+
+                let rdata: u32 = 0x08080808;
+
+                let mut questions_bytes = Vec::new();
+                let mut answers_bytes = Vec::new();
+
+                let mut cursor = std::io::Cursor::new(&buf[..]);
+                cursor.set_position(12);
+
+                for _ in 0..header.qd_count {
+                    let question = DNSQuestion::from_bytes_with_compression_advance_buffer(
+                        &mut cursor
+                    );
+                    let answer = DNSAnswer::new_atype_inclass(
+                        question.name.clone(),
+                        question.r#type,
+                        question.class,
+                        60,
+                        4,
+                        rdata
+                    );
+
+                    questions_bytes.extend(question.to_bytes());
+                    answers_bytes.extend(answer.to_bytes());
+                }
+
+                response.put(&questions_bytes[..]);
+                response.put(&answers_bytes[..]);
+
                 udp_socket.send_to(response.as_ref(), source).expect("Failed to send response");
             }
             Err(e) => {
