@@ -1,11 +1,13 @@
-use bytes::{ BufMut, BytesMut };
+use bytes::{ Bytes, Buf, BufMut, BytesMut };
+use crate::packet::DNSPacket;
+use std::io::Cursor;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum RData {
     RDataARecord(u32),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DNSAnswer {
     name: Vec<String>,
     r#type: u16, //0x0001
@@ -39,7 +41,31 @@ impl DNSAnswer {
         buf
     }
 
-    pub fn new_atype_inclass(
+    pub fn from_bytes_with_compression_advance_buffer(
+        cursor: &mut Cursor<&mut Bytes>
+    ) -> Option<Self> {
+        let mut labels = Vec::<String>::new();
+
+        let mut offset = cursor.position() as usize;
+        let full_buf = cursor.get_ref();
+
+        offset = DNSPacket::read_labels_at(full_buf, offset, &mut labels);
+
+        cursor.set_position(offset as u64);
+
+        Some(
+            Self::new(
+                labels,
+                cursor.get_u16(),
+                cursor.get_u16(),
+                cursor.get_u32(),
+                cursor.get_u16(),
+                cursor.get_u32()
+            )
+        )
+    }
+
+    pub fn new(
         labels: Vec<String>,
         r#type: u16,
         class: u16,

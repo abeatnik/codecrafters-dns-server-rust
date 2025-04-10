@@ -1,12 +1,16 @@
-use bytes::{ BufMut, BytesMut, Buf };
+use std::io::Cursor;
 
+use anyhow::Error;
+use bytes::{ Bytes, BufMut, BytesMut, Buf };
+
+#[derive(Clone, Debug)]
 pub struct DNSHeader {
-    id: u16,
+    pub id: u16,
     pub flags: DNSFlags,
     pub qd_count: u16,
     pub an_count: u16,
-    ns_count: u16,
-    ar_count: u16,
+    pub ns_count: u16,
+    pub ar_count: u16,
 }
 
 impl DNSHeader {
@@ -23,15 +27,16 @@ impl DNSHeader {
         buf
     }
 
-    pub fn from_bytes(mut buf: impl Buf) -> Self {
-        Self {
+    pub fn from_bytes(buf: &mut Cursor<&mut Bytes>) -> Result<Self, Error> {
+        let header = Self {
             id: buf.get_u16(),
             flags: DNSFlags::from_flag_bits(buf.get_u16()),
             qd_count: buf.get_u16(),
             an_count: buf.get_u16(),
             ns_count: buf.get_u16(),
             ar_count: buf.get_u16(),
-        }
+        };
+        Ok(header)
     }
 
     pub fn new(
@@ -53,6 +58,7 @@ impl DNSHeader {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct DNSFlags {
     pub qr: bool,
     pub opcode: u8, //will become 4 bits later, so max is 0xF

@@ -1,7 +1,10 @@
-use bytes::{ Buf, BufMut, BytesMut };
-use std::{ io::Cursor };
+use anyhow::Error;
+use bytes::{ Bytes, Buf, BufMut, BytesMut };
+use std::io::Cursor;
 
-#[derive(Debug)]
+use crate::packet::DNSPacket;
+
+#[derive(Debug, Clone)]
 pub struct DNSQuestion {
     pub name: Vec<String>, //labels
     pub r#type: u16, //0x0001
@@ -42,7 +45,7 @@ impl DNSQuestion {
         }
     }
 
-    pub fn from_bytes(mut buf: impl Buf) -> Self {
+    pub fn from_bytes(mut buf: impl Buf) -> Result<Self, Error> {
         let mut labels = Vec::<String>::new();
 
         let mut read_all_labels = false;
@@ -58,41 +61,27 @@ impl DNSQuestion {
             let label = String::from_utf8_lossy(&label_bytes);
             labels.push(label.to_string());
         }
+        buf.get_u64();
 
-        Self::new_atype_inclass(labels)
+        Ok(Self::new_atype_inclass(labels))
     }
 
-    pub fn from_bytes_with_compression_advance_buffer(cursor: &mut Cursor<&[u8]>) -> Self {
+    pub fn from_bytes_with_compression_advance_buffer(
+        cursor: &mut Cursor<&mut Bytes>
+    ) -> Result<Self, Error> {
         let mut labels = Vec::<String>::new();
 
-        let mut read_all_labels = false;
+        let mut offset = cursor.position() as usize;
+        let full_buf = cursor.get_ref();
 
-        'outer: while !read_all_labels {
-            let pos = cursor.position() as usize;
-            let byte = cursor.get_ref()[pos];
-            let is_compressed = (byte >> 6) == 0x03;
+        offset = DNSPacket::read_labels_at(full_buf, offset, &mut labels);
 
-            if !is_compressed {
-                let len = cursor.get_u8();
-                if len == 0 {
-                    read_all_labels = true;
-                    break 'outer;
-                }
-                let label_bytes = cursor.copy_to_bytes(len.into());
-                let label = String::from_utf8_lossy(&label_bytes);
-                labels.push(label.to_string());
-            } else {
-                let byte = cursor.get_ref()[pos];
-                let offset = (((byte & 0x3f) as u16) << 6) | (cursor.get_ref()[pos + 1] as u16);
-                cursor.set_position(cursor.position() + 2);
-                let offset = offset as usize;
-                let len = cursor.get_ref()[offset];
-                let label_bytes = &cursor.get_ref()[offset + 1..offset + 1 + (len as usize)];
-                let label = String::from_utf8_lossy(label_bytes);
-                labels.push(label.to_string());
-                break 'outer;
-            }
+        cursor.set_position(offset as u64);
+
+        if cursor.remaining() >= 4 {
+            cursor.advance(4);
         }
-        Self::new_atype_inclass(labels)
+
+        Ok(Self::new_atype_inclass(labels))
     }
 }

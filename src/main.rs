@@ -1,16 +1,66 @@
 #[allow(unused_imports)]
+use std::io::Cursor;
 use std::net::UdpSocket;
-use bytes::{ BufMut, BytesMut };
+use std::env;
+use bytes::{ BufMut, Bytes, BytesMut };
 
 use codecrafters_dns_server::header::DNSHeader;
-use codecrafters_dns_server::question::DNSQuestion;
-use codecrafters_dns_server::answer::DNSAnswer;
+use codecrafters_dns_server::packet::DNSPacket;
+
+fn forward_to_upstream(
+    query: &DNSPacket,
+    other_dns_socket: &UdpSocket,
+    address: &str
+) -> Result<Vec<DNSPacket>, anyhow::Error> {
+    let mut packets = Vec::<DNSPacket>::new();
+
+    for question in query.questions.iter() {
+        let message = DNSPacket {
+            header: DNSHeader {
+                qd_count: 1,
+                ..query.header.clone()
+            },
+            questions: vec![question.clone()],
+            answers: Vec::new(),
+        };
+
+        let data = Bytes::from(message.to_bytes());
+        other_dns_socket.send_to(&data, address)?;
+
+        let mut buf = [0; 512];
+        let (size, _) = other_dns_socket.recv_from(&mut buf)?;
+        let mut bytes = BytesMut::from(&buf[..size]).freeze();
+        
+        let response = DNSPacket::from_bytes(&mut bytes)?;
+        packets.push(response);
+    }
+
+    Ok(packets)
+}
 
 fn main() {
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
-    println!("Logs from your program will appear here!");
+    let other_dns = {
+        let args: Vec<String> = env::args().collect();
+        let mut resolver_address: Option<String> = None;
 
-    // Uncomment this block to pass the first stage
+        for i in 0..args.len() {
+            if args[i] == "--resolver" && i + 1 < args.len() {
+                resolver_address = Some(args[i + 1].clone());
+                break;
+            }
+        }
+
+        match resolver_address {
+            Some(address) => {
+                let socket = UdpSocket::bind("0.0.0.0:0").expect(
+                    "Failed to bind to resolver address"
+                );
+                Some((socket, address))
+            }
+            None => None,
+        }
+    };
+
     let udp_socket = UdpSocket::bind("127.0.0.1:2053").expect("Failed to bind to address");
     let mut buf = [0; 512];
 
@@ -18,46 +68,41 @@ fn main() {
         match udp_socket.recv_from(&mut buf) {
             Ok((size, source)) => {
                 println!("Received {} bytes from {}", size, source);
-                let header_bytes = &buf[..12];
-                let mut header = DNSHeader::from_bytes(header_bytes);
-                header.flags.qr = true;
-                header.flags.aa = false;
-                header.flags.tc = false;
-                header.flags.ra = false;
-                header.flags.z = 0;
-                header.flags.rcode = if header.flags.opcode == 0 { 0 } else { 4 };
-                header.an_count = header.qd_count;
+
+                let mut query_bytes = Bytes::copy_from_slice(&buf[..size]);
+
+                println!("bytes received: {:?}", &query_bytes);
+
+                let query = match DNSPacket::from_bytes(&mut query_bytes) {
+                    Ok(q) => q,
+                    Err(e) => {
+                        eprintln!("Failed to parse DNS query: {}", e);
+                        continue;
+                    }
+                };
+
+                let result = match other_dns {
+                    Some((ref upstream_socket, ref address)) => {
+                        forward_to_upstream(&query, &upstream_socket, &address).map_err(|e| {
+                            eprintln!("Error forwarding query to upstream DNS: {}", e);
+                            e
+                        })
+                    }
+                    None => { Err(anyhow::anyhow!("No upstream DNS configured")) }
+                };
 
                 let mut response = BytesMut::new();
-                response.put(header.to_bytes());
 
-                let rdata: u32 = 0x08080808;
-
-                let mut questions_bytes = Vec::new();
-                let mut answers_bytes = Vec::new();
-
-                let mut cursor = std::io::Cursor::new(&buf[..]);
-                cursor.set_position(12);
-
-                for _ in 0..header.qd_count {
-                    let question = DNSQuestion::from_bytes_with_compression_advance_buffer(
-                        &mut cursor
-                    );
-                    let answer = DNSAnswer::new_atype_inclass(
-                        question.name.clone(),
-                        question.r#type,
-                        question.class,
-                        60,
-                        4,
-                        rdata
-                    );
-
-                    questions_bytes.extend(question.to_bytes());
-                    answers_bytes.extend(answer.to_bytes());
+                match result {
+                    Ok(packets) => {
+                        let response_pakage = DNSPacket::merge(packets);
+                        response.put(response_pakage.to_bytes());
+                    }
+                    Err(e) => {
+                        eprintln!("Error while forwarding query: {}", e);
+                        continue;
+                    }
                 }
-
-                response.put(&questions_bytes[..]);
-                response.put(&answers_bytes[..]);
 
                 udp_socket.send_to(response.as_ref(), source).expect("Failed to send response");
             }
