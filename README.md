@@ -1,37 +1,22 @@
 [![progress-banner](https://backend.codecrafters.io/progress/dns-server/673a3fce-c8ee-4f6b-9cc2-15b3acf2d0fc)](https://app.codecrafters.io/users/abeatnik?r=2qF)
 
-This is a starting point for Rust solutions to the
-["Build Your Own DNS server" Challenge](https://app.codecrafters.io/courses/dns-server/overview).
+# dns-server
 
-In this challenge, you'll build a DNS server that's capable of parsing and
-creating DNS packets, responding to DNS queries, handling various record types
-and doing recursive resolve. Along the way we'll learn about the DNS protocol,
-DNS packet format, root servers, authoritative servers, forwarding servers,
-various record types (A, AAAA, CNAME, etc) and more.
+A basic DNS server written in Rust for the [Codecrafters DNS Server Challenge](https://app.codecrafters.io/courses/dns-server/overview).
 
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
+The challenge is to implement the core parts of a DNS server from scratch: listening for queries, parsing packets, and sending valid responses, without using any DNS libraries.
 
-# Passing the first stage
+## Features
 
-The entry point for your `your_program.sh` implementation is in `src/main.rs`.
-Study and uncomment the relevant code, and push your changes to pass the first
-stage:
+- Parses incoming DNS queries over UDP
+- Supports multiple questions per packet (no compression in response)
+- Handles compressed label sequences in the question section
+- Responds with A records (IPv4) for each query
+- Response IPs are hardcoded / synthetic for now
 
-```sh
-git commit -am "pass 1st stage" # any msg
-git push origin master
+## Running
+
+```bash
+cargo run -- 2053
+dig @127.0.0.1 -p 2053 codecrafters.io
 ```
-
-Time to move on to the next stage!
-
-# Stage 2 & beyond
-
-Note: This section is for stages 2 and beyond.
-
-1. Ensure you have `cargo (1.85)` installed locally
-1. Run `./your_program.sh` to run your program, which is implemented in
-   `src/main.rs`. This command compiles your Rust project, so it might be slow
-   the first time you run it. Subsequent runs will be fast.
-1. Commit your changes and run `git push origin master` to submit your solution
-   to CodeCrafters. Test output will be streamed to your terminal.
